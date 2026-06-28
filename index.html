@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Horizon — Habit Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============ RESET & BASE ============ */
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{height:100%;}
+body{
+  font-family:'IBM Plex Sans', sans-serif;
+  overflow-x:hidden;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.6s ease;
+}
+button{font-family:inherit; cursor:pointer; border:none; background:none;}
+input,textarea,select{font-family:inherit; font-size:15px;}
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible{
+  outline: 2px solid var(--focus); outline-offset: 2px;
+}
+::-webkit-scrollbar{width:8px; height:8px;}
+::-webkit-scrollbar-thumb{background:var(--scroll-thumb); border-radius:8px;}
+
+/* ============ THEME TOKENS ============ */
+body[data-theme="day"]{
+  --sky-top:#5E92B8; --sky-mid:#9FC1D6; --sky-bottom:#F3D9A6;
+  --mtn-far:#8FA9B8; --mtn-mid:#5C7A8C; --mtn-near:#374F60;
+  --accent:#D97D3D; --accent-2:#4F7942;
+  --surface: rgba(255,252,247,0.86); --surface-strong:#FFFCF7;
+  --text:#26323D; --text-soft:#5B6B76; --border: rgba(38,50,61,0.12);
+  --focus:#D97D3D; --scroll-thumb: rgba(38,50,61,0.25);
+  --display-font:'Fraunces', serif; --display-weight:600;
+  --shadow: 0 10px 30px -12px rgba(38,50,61,0.25);
+  background: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-bottom) 100%);
+  color:var(--text);
+}
+body[data-theme="night"]{
+  --sky-top:#040611; --sky-mid:#0B0E22; --sky-bottom:#161A36;
+  --accent:#FFD23F; --accent-2:#2DD4BF;
+  --surface: rgba(13,15,32,0.74); --surface-strong:#11142B;
+  --text:#E7EAF7; --text-soft:#9AA1C2; --border: rgba(231,234,247,0.12);
+  --focus:#FFD23F; --scroll-thumb: rgba(231,234,247,0.25);
+  --display-font:'Space Grotesk', sans-serif; --display-weight:600;
+  --shadow: 0 10px 34px -10px rgba(0,0,0,0.6);
+  background: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 55%, var(--sky-bottom) 100%);
+  color:var(--text);
+}
+h1,h2,h3{font-family:var(--display-font); font-weight:var(--display-weight); letter-spacing:-0.01em;}
+.mono{font-family:'IBM Plex Mono', monospace;}
+
+/* ============ BACKDROP ============ */
+.backdrop{
+  position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none;
+}
+/* --- day: mountains & sun --- */
+.bd-sun{
+  position:absolute; width:120px; height:120px; border-radius:50%;
+  background: radial-gradient(circle, #FFE9B8 0%, #FFD27D 45%, rgba(255,210,125,0) 75%);
+  top:8%; left:65%; filter: drop-shadow(0 0 40px rgba(255,210,125,0.7));
+  animation: sunDrift 50s ease-in-out infinite alternate;
+}
+.bd-cloud{
+  position:absolute; background:rgba(255,255,255,0.55); border-radius:50px;
+  filter: blur(1px);
+}
+.mtn{ position:absolute; bottom:0; left:0; width:100%; }
+.mtn-far{ bottom:18%; fill:var(--mtn-far); opacity:0.85; }
+.mtn-mid{ bottom:9%; fill:var(--mtn-mid); opacity:0.92;}
+.mtn-near{ bottom:0; fill:var(--mtn-near); }
+/* --- night: stars, planets, shooting star --- */
+.star{ position:absolute; background:#fff; border-radius:50%; opacity:0.85; }
+.planet{ position:absolute; border-radius:50%; }
+.planet-ring{
+  position:absolute; border-radius:50%; border:6px solid rgba(255,255,255,0.18);
+  transform: rotate(-18deg) scaleY(0.32);
+}
+.shooting-star{
+  position:absolute; width:2px; height:2px; background:transparent;
+  top:12%; left:-10%;
+}
+.shooting-star::before{
+  content:''; position:absolute; width:90px; height:2px; right:0;
+  background: linear-gradient(90deg, rgba(255,255,255,0), #fff);
+  transform: translateY(-1px);
+}
+@keyframes sunDrift{ from{ transform: translate(0,0); } to{ transform: translate(-40px, 18px); } }
+@keyframes cloudDrift{ from{ transform: translateX(0); } to{ transform: translateX(60px); } }
+@keyframes twinkle{ 0%,100%{ opacity:0.25;} 50%{ opacity:1;} }
+@keyframes planetDrift{ from{ transform: translate(0,0); } to{ transform: translate(-18px,12px); } }
+@keyframes shoot{
+  0%{ left:-10%; top:10%; opacity:0; }
+  5%{ opacity:1; }
+  35%{ left:70%; top:34%; opacity:0; }
+  100%{ left:70%; top:34%; opacity:0; }
+}
+@media (prefers-reduced-motion: no-preference){
+  .bd-cloud{ animation: cloudDrift 60s ease-in-out infinite alternate; }
+  .star{ animation: twinkle 3.5s ease-in-out infinite; }
+  .planet{ animation: planetDrift 70s ease-in-out infinite alternate; }
+  .shooting-star{ animation: shoot 7s linear infinite; }
+}
+
+/* ============ LAYOUT SHELL ============ */
+.app{ position:relative; z-index:1; min-height:100vh; display:flex; flex-direction:column; }
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 20px 12px; max-width:560px; margin:0 auto; width:100%;
+}
+.brand{ display:flex; align-items:center; gap:9px; font-size:21px; }
+.brand .mark{ font-family:var(--display-font); font-weight:700; }
+.brand .sub{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-soft); letter-spacing:0.06em; display:block; margin-top:-2px;}
+.top-actions{ display:flex; align-items:center; gap:6px; }
+.icon-btn{
+  width:38px; height:38px; border-radius:11px; display:flex; align-items:center; justify-content:center;
+  background:var(--surface); border:1px solid var(--border); font-size:17px; color:var(--text);
+  box-shadow:var(--shadow); transition: transform 0.15s ease;
+}
+.icon-btn:active{ transform: scale(0.92); }
+
+.content{ flex:1; max-width:560px; margin:0 auto; width:100%; padding:4px 16px 110px; }
+.view{ display:none; animation: viewIn 0.35s ease; }
+.view.active{ display:block; }
+@keyframes viewIn{ from{ opacity:0; transform: translateY(6px); } to{ opacity:1; transform:none; } }
+
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  box-shadow:var(--shadow); padding:16px; backdrop-filter: blur(6px);
+}
+.section-title{ font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-soft); margin: 22px 2px 10px; }
+.section-title:first-child{ margin-top:6px; }
+
+/* bottom nav */
+.bottomnav{
+  position:fixed; bottom:0; left:0; right:0; z-index:5;
+  display:flex; justify-content:center;
+}
+.bottomnav-inner{
+  width:100%; max-width:560px; margin:0 16px; margin-bottom:14px;
+  background:var(--surface-strong); border:1px solid var(--border); border-radius:18px;
+  box-shadow:var(--shadow); display:flex; padding:6px; backdrop-filter: blur(10px);
+}
+.navbtn{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+  padding:9px 4px; border-radius:13px; color:var(--text-soft); font-size:11px; font-weight:500;
+}
+.navbtn .ic{ font-size:18px; }
+.navbtn.active{ background: color-mix(in srgb, var(--accent) 18%, transparent); color:var(--text); }
+
+/* ============ CALENDAR ============ */
+.cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.cal-head h2{ font-size:19px; }
+.cal-nav-btn{ width:34px; height:34px; border-radius:10px; background:var(--surface); border:1px solid var(--border); font-size:16px; }
+.cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+.cal-dow{ text-align:center; font-size:11px; color:var(--text-soft); font-weight:500; padding-bottom:4px; }
+.cal-cell{
+  aspect-ratio:1; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:var(--surface); border:1px solid var(--border); font-size:13px; gap:3px; position:relative;
+  transition: transform 0.12s ease;
+}
+.cal-cell:active{ transform: scale(0.93); }
+.cal-cell.empty{ background:transparent; border:none; }
+.cal-cell.today{ border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+.cal-dots{ display:flex; gap:2px; }
+.cal-dot{ width:5px; height:5px; border-radius:50%; background:var(--accent-2); }
+.cal-dot.empty-dot{ background: var(--border); }
+
+.today-panel{ margin-top:24px; }
+.today-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px;}
+.today-head h3{ font-size:17px; }
+.today-head .count{ font-size:12px; color:var(--text-soft); }
+.habit-log-row{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:9px; box-shadow:var(--shadow); }
+.hlr-top{ display:flex; align-items:center; gap:10px; }
+.hlr-check{ width:26px; height:26px; border-radius:8px; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:14px; background:transparent; color:transparent; transition: all 0.15s ease;}
+.hlr-check.done{ background:var(--accent-2); border-color:var(--accent-2); color:#fff; }
+.hlr-emoji{ font-size:19px; }
+.hlr-name{ flex:1; font-weight:500; font-size:14.5px; }
+.hlr-cat{ font-size:10.5px; padding:2px 8px; border-radius:20px; color:#fff; white-space:nowrap; }
+.hlr-expand-btn{ font-size:13px; color:var(--text-soft); padding:4px 6px; }
+.hlr-detail{ margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); display:none; }
+.hlr-detail.open{ display:block; }
+.hlr-detail textarea{
+  width:100%; min-height:60px; resize:vertical; background:transparent; border:1px solid var(--border);
+  border-radius:10px; padding:8px 10px; color:var(--text); font-size:13.5px;
+}
+.hlr-img-row{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+.hlr-img-thumb{ position:relative; width:56px; height:56px; border-radius:9px; overflow:hidden; border:1px solid var(--border); }
+.hlr-img-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.hlr-img-thumb .rm{ position:absolute; top:1px; right:1px; background:rgba(0,0,0,0.6); color:#fff; width:16px; height:16px; border-radius:50%; font-size:10px; line-height:16px; }
+.hlr-img-add{ width:56px; height:56px; border-radius:9px; border:1.5px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--text-soft); }
+.hlr-save{ margin-top:10px; font-size:12.5px; color:var(--accent); font-weight:600; }
+.empty-state{ text-align:center; padding:34px 18px; color:var(--text-soft); font-size:14px; }
+.empty-state .e-emoji{ font-size:30px; display:block; margin-bottom:8px; }
+
+/* ============ HABITS LIST ============ */
+.habits-toolbar{ display:flex; justify-content:flex-end; margin-bottom:14px; }
+.btn-primary{
+  background:var(--accent); color:#fff; padding:10px 16px; border-radius:12px; font-size:14px; font-weight:600;
+  box-shadow:var(--shadow); display:flex; align-items:center; gap:6px;
+}
+.habit-card{ background:var(--surface); border:1px solid var(--border); border-radius:15px; padding:13px 14px; margin-bottom:10px; box-shadow:var(--shadow); display:flex; align-items:center; gap:12px;}
+.habit-card .emo{ font-size:24px; width:38px; text-align:center;}
+.habit-card .meta{ flex:1; min-width:0; }
+.habit-card .meta .nm{ font-weight:600; font-size:15px; }
+.habit-card .meta .row2{ display:flex; align-items:center; gap:8px; margin-top:3px; }
+.streak-pill{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--text-soft); }
+.habit-actions{ display:flex; gap:4px; }
+.habit-actions button{ width:30px; height:30px; border-radius:9px; font-size:14px; color:var(--text-soft); }
+
+/* ============ DISCOVER / SWIPE ============ */
+.swipe-stage{ position:relative; height:420px; display:flex; align-items:center; justify-content:center; margin-top:10px;}
+.swipe-card{
+  position:absolute; width:100%; max-width:340px; height:400px; border-radius:22px;
+  background:var(--surface-strong); border:1px solid var(--border); box-shadow:var(--shadow);
+  display:flex; flex-direction:column; padding:26px 22px; touch-action:none; user-select:none;
+}
+.swipe-card .stripe{ position:absolute; top:0; left:22px; right:22px; height:5px; border-radius:0 0 6px 6px; }
+.sc-emoji{ font-size:48px; margin-top:10px; }
+.sc-name{ font-size:23px; margin-top:14px; line-height:1.15; }
+.sc-cat{ display:inline-block; margin-top:8px; font-size:11.5px; padding:3px 10px; border-radius:20px; color:#fff; }
+.sc-desc{ font-size:14px; color:var(--text-soft); margin-top:14px; line-height:1.5; flex:1; }
+.sc-guide-btn{ align-self:flex-start; font-size:13px; font-weight:600; color:var(--accent); border-bottom:1px solid var(--accent); padding-bottom:1px; }
+.swipe-actions{ display:flex; justify-content:center; gap:22px; margin-top:18px; }
+.swipe-btn{ width:58px; height:58px; border-radius:50%; background:var(--surface); border:1px solid var(--border); font-size:22px; box-shadow:var(--shadow); }
+.swipe-btn.decline{ color:#C0563D; }
+.swipe-btn.accept{ color:var(--accent-2); }
+.swipe-hint{ text-align:center; font-size:12px; color:var(--text-soft); margin-top:14px; }
+
+/* ============ TIPS ============ */
+.tip-card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:9px; box-shadow:var(--shadow);}
+.tip-card .tip-cat{ font-size:10.5px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+.tip-card h4{ font-size:15px; margin-top:4px; font-weight:600; font-family:'IBM Plex Sans',sans-serif; }
+.tip-card p{ font-size:13.5px; color:var(--text-soft); margin-top:4px; line-height:1.45; }
+
+/* ============ MODALS ============ */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(5,8,18,0.5); z-index:30; display:flex; align-items:flex-end; justify-content:center;
+  opacity:0; pointer-events:none; transition: opacity 0.25s ease;
+}
+.modal-overlay.open{ opacity:1; pointer-events:auto; }
+.modal-sheet{
+  width:100%; max-width:560px; max-height:86vh; overflow-y:auto; background:var(--surface-strong);
+  border-radius:22px 22px 0 0; padding:20px 18px 28px; transform: translateY(100%); transition: transform 0.3s cubic-bezier(.2,.8,.2,1);
+  border:1px solid var(--border);
+}
+.modal-overlay.open .modal-sheet{ transform: translateY(0); }
+.modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.modal-head h3{ font-size:18px; }
+.modal-close{ width:32px; height:32px; border-radius:9px; background:var(--surface); border:1px solid var(--border); font-size:16px; }
+.field{ margin-bottom:14px; }
+.field label{ display:block; font-size:12.5px; color:var(--text-soft); margin-bottom:6px; font-weight:500; }
+.field input[type=text], .field select{
+  width:100%; padding:10px 12px; border-radius:11px; border:1px solid var(--border); background:transparent; color:var(--text);
+}
+.emoji-pick{ display:flex; flex-wrap:wrap; gap:7px; }
+.emoji-pick button{ width:40px; height:40px; border-radius:10px; border:1.5px solid var(--border); font-size:19px; background:transparent; }
+.emoji-pick button.sel{ border-color:var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.modal-guide-body{ font-size:14px; line-height:1.65; color:var(--text); }
+.modal-actions{ display:flex; gap:10px; margin-top:18px; }
+.btn-secondary{ flex:1; padding:11px; border-radius:12px; border:1px solid var(--border); font-weight:600; font-size:14px; color:var(--text); background:var(--surface); }
+.btn-block{ flex:1; padding:11px; border-radius:12px; font-weight:600; font-size:14px; color:#fff; }
+
+/* ============ CRAWL (theme transition) ============ */
+.crawl-overlay{
+  position:fixed; inset:0; background:#000; z-index:50; display:flex; align-items:center; justify-content:center;
+  opacity:0; pointer-events:none; transition: opacity 0.4s ease; overflow:hidden;
+}
+.crawl-overlay.show{ opacity:1; pointer-events:auto; }
+.crawl-text{
+  font-family:'Space Grotesk', sans-serif; color:#FFD23F; font-weight:600; text-align:center; font-size:22px;
+  line-height:2; max-width:420px; padding:0 24px;
+  transform: perspective(420px) rotateX(35deg) translateY(60vh) scale(2.1);
+  transform-origin:50% 100%;
+}
+.crawl-overlay.show .crawl-text{ animation: crawlUp 5.5s linear forwards; }
+@keyframes crawlUp{
+  0%{ transform: perspective(420px) rotateX(35deg) translateY(60vh) scale(2.1); opacity:1;}
+  85%{ opacity:1; }
+  100%{ transform: perspective(420px) rotateX(35deg) translateY(-120vh) scale(0.4); opacity:0; }
+}
+.crawl-skip{ position:absolute; bottom:30px; right:50%; transform:translateX(50%); color:#9AA1C2; font-size:12.5px; border:1px solid #2A2E4A; padding:6px 14px; border-radius:20px;}
+
+/* loading */
+.boot-loading{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:60; background:inherit; color:var(--text); font-size:13px; font-family:'IBM Plex Mono',monospace;}
+.hidden{ display:none !important; }
+
+@media (max-width:380px){
+  .swipe-card{ height:380px; }
+  .sc-emoji{ font-size:40px; }
+}
+</style>
+</head>
+<body data-theme="day">
+
+<div class="boot-loading" id="bootLoading">loading your log…</div>
+
+<div class="backdrop" id="backdrop"></div>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <span class="mark">Horizon</span>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="crawlReplayBtn" title="Replay transmission" style="display:none;">✦</button>
+      <button class="icon-btn" id="themeToggle" title="Switch theme">🌙</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- CALENDAR / HOME -->
+    <section class="view active" id="view-calendar">
+      <div class="cal-head">
+        <button class="cal-nav-btn" id="prevMonth">‹</button>
+        <h2 id="monthLabel">Month</h2>
+        <button class="cal-nav-btn" id="nextMonth">›</button>
+      </div>
+      <div class="cal-grid" id="calDow"></div>
+      <div class="cal-grid" id="calendarGrid" style="margin-top:5px;"></div>
+
+      <div class="today-panel">
+        <div class="today-head">
+          <h3>Today's log</h3>
+          <span class="count mono" id="todayDateLabel"></span>
+        </div>
+        <div id="todayHabitList"></div>
+      </div>
+    </section>
+
+    <!-- HABITS -->
+    <section class="view" id="view-habits">
+      <div class="habits-toolbar">
+        <button class="btn-primary" id="addHabitBtn">＋ Add habit</button>
+      </div>
+      <div id="habitsList"></div>
+    </section>
+
+    <!-- DISCOVER -->
+    <section class="view" id="view-discover">
+      <div class="swipe-stage" id="swipeStage"></div>
+      <div class="swipe-actions">
+        <button class="swipe-btn decline" id="declineBtn">✕</button>
+        <button class="swipe-btn accept" id="acceptBtn">✓</button>
+      </div>
+      <p class="swipe-hint">Drag the card, or tap a button. Decline shows you the next one.</p>
+    </section>
+
+    <!-- TIPS -->
+    <section class="view" id="view-tips">
+      <div id="tipsList"></div>
+    </section>
+
+  </div>
+
+  <div class="bottomnav">
+    <div class="bottomnav-inner">
+      <button class="navbtn active" data-view="calendar"><span class="ic">📅</span>Calendar</button>
+      <button class="navbtn" data-view="habits"><span class="ic">✅</span>Habits</button>
+      <button class="navbtn" data-view="discover"><span class="ic">🔀</span>Discover</button>
+      <button class="navbtn" data-view="tips"><span class="ic">💡</span>Tips</button>
+    </div>
+  </div>
+</div>
+
+<!-- Day detail modal (calendar) -->
+<div class="modal-overlay" id="dayModalOverlay">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3 id="dayModalTitle">Date</h3>
+      <button class="modal-close" id="dayModalClose">✕</button>
+    </div>
+    <div id="dayModalBody"></div>
+  </div>
+</div>
+
+<!-- Add habit modal -->
+<div class="modal-overlay" id="addHabitOverlay">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3>New habit</h3>
+      <button class="modal-close" id="addHabitClose">✕</button>
+    </div>
+    <div class="field">
+      <label for="habitNameInput">Name</label>
+      <input type="text" id="habitNameInput" placeholder="e.g. Stretch for 10 minutes" maxlength="60">
+    </div>
+    <div class="field">
+      <label>Icon</label>
+      <div class="emoji-pick" id="emojiPick"></div>
+    </div>
+    <div class="field">
+      <label for="habitCatSelect">Category</label>
+      <select id="habitCatSelect"></select>
+    </div>
+    <button class="btn-primary" style="width:100%; justify-content:center;" id="saveHabitBtn">Save habit</button>
+  </div>
+</div>
+
+<!-- Article / guide modal -->
+<div class="modal-overlay" id="articleOverlay">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3 id="articleTitle">Guide</h3>
+      <button class="modal-close" id="articleClose">✕</button>
+    </div>
+    <div class="modal-guide-body" id="articleBody"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="articleDeclineBtn">Maybe later</button>
+      <button class="btn-block" id="articleAcceptBtn" style="background:var(--accent-2);">Add to habits</button>
+    </div>
+  </div>
+</div>
+
+<!-- Crawl transition -->
+<div class="crawl-overlay" id="crawlOverlay">
+  <div class="crawl-text" id="crawlText"></div>
+  <button class="crawl-skip" id="crawlSkip">skip</button>
+</div>
+
+<script>
+/* =========================================================
+   DATA
+========================================================= */
+const CATEGORY_COLORS = {
+  'Fitness':'#D97D3D', 'Coding & AI':'#2DD4BF', 'Maker & Hardware':'#B6562F',
+  'Finance':'#4F7942', 'Mindfulness':'#6E8FA8', 'Creative':'#C2598B',
+  'Reading & Learning':'#8A6D3B', 'Music':'#7C5CFF'
+};
+const CATEGORIES = Object.keys(CATEGORY_COLORS);
+const EMOJI_CHOICES = ['🏋️','🧘','🏃','🥗','💻','🧠','🔧','🛠️','🔩','💰','📈','📚','📝','🎨','🎸','🧩','🌱','💡','⏱️','🗂️'];
+
+const SKILLS = [
+ {id:'sk1', emoji:'🏋️', name:'Daily Strength Training', category:'Fitness',
+  desc:'15–20 minutes of resistance work, just enough to keep the habit alive on busy days.',
+  guide:'Pick three movements that cover the whole body: a push, a pull, and a leg movement. Push-ups, rows or pull-ups, and squats or lunges cover most of it with zero equipment. Start with a number of reps you could do twice over — the goal in week one is showing up, not maxing out. Log the session right after you finish, while it is fresh, so the streak feels real. Increase reps or add a fourth movement only once the first three feel easy for two weeks straight. The biggest failure point is skipping "small" sessions on bad days — a five-minute version still counts and keeps the chain unbroken.'},
+ {id:'sk2', emoji:'🧘', name:'Morning Mobility Routine', category:'Fitness',
+  desc:'A short stretch and joint routine before the day starts, to keep you moving well.',
+  guide:'Five minutes, same order every time, right after you wake up: ankles, hips, spine, shoulders, neck. Doing it in a fixed sequence removes the decision-making that kills most morning routines. Keep a yoga mat or towel visible near your bed — visibility beats willpower. Track it as done the moment you finish, before checking your phone. After two weeks, notice which joint feels tightest and give it 30 extra seconds. This habit pairs well with strength training: loosen up first, lift later in the day.'},
+ {id:'sk3', emoji:'🥗', name:'Track Daily Macros', category:'Fitness',
+  desc:'Log meals for protein, carbs, and fat to understand what you are actually eating.',
+  guide:'Use any free tracking app and commit to logging everything for two weeks before judging the data — partial logging gives you a false picture. Weigh your protein source once with a kitchen scale so you learn what a portion actually looks like by eye, then you can mostly eyeball it after that. Log meals right after eating, not at the end of the day from memory. Look at weekly averages, not single days — one heavy meal does not undo a good week. The note field in this tracker is a good place to jot how a meal made you feel, which matters more long-term than hitting an exact number.'},
+
+ {id:'sk4', emoji:'💻', name:'Learn Python Fundamentals', category:'Coding & AI',
+  desc:'30 minutes a day of core Python — syntax, data structures, and small scripts.',
+  guide:'Work through one small, self-contained script per session rather than long passive tutorials: a temperature converter, a to-do list, a simple text-based game. Typing code yourself, even when copying a pattern, builds muscle memory that watching videos never will. When stuck for more than ten minutes on an error, read the actual error message line by line before searching — most beginners skip straight to Google and miss what Python is telling them directly. Keep a personal "snippets" file of patterns you reuse, like reading a file or looping over a dictionary. After a few weeks, this becomes the foundation for the AI and data libraries you will want next.'},
+ {id:'sk5', emoji:'🧠', name:'Build a Neural Net From Scratch', category:'Coding & AI',
+  desc:'Implement a tiny neural network with plain code, no frameworks, to learn the internals.',
+  guide:'Start with a single neuron doing linear regression using only loops and basic math — no NumPy yet. Once gradient descent makes sense by hand, add a second layer and an activation function, then finally allow yourself a library like NumPy to speed up the matrix math. The goal is not a fast model; it is being able to explain backpropagation without looking it up. Use a tiny toy dataset (predicting one number from two inputs) so you can sanity-check every output. Once it works, deliberately break it — remove the activation function, change the learning rate — to see what each piece actually does. This habit pairs naturally with daily Python practice.'},
+ {id:'sk6', emoji:'🧩', name:'Daily Coding Problem', category:'Coding & AI',
+  desc:'One algorithm or data-structure problem a day to keep problem-solving sharp.',
+  guide:'Pick one problem, set a 25-minute timer, and genuinely attempt it before looking at any hint. If you solve it, immediately write one sentence about the pattern you used (two pointers, sliding window, recursion) — that sentence is what actually sticks, more than the code. If you do not solve it in time, read just enough of the explanation to get unstuck, then close it and rewrite the solution yourself from memory the next day. Rotate topics weekly rather than grinding the same category, so patterns generalize instead of becoming memorized answers to specific questions.'},
+
+ {id:'sk7', emoji:'🔧', name:'Learn CAD Modeling', category:'Maker & Hardware',
+  desc:'Practice parametric 3D modeling for parts, enclosures, and brackets.',
+  guide:'Recreate one real object from your desk each session — a phone stand, a cable clip, a box for a small board — using exact measurements from calipers or a ruler. Modeling something physical forces you to think about tolerances and how parts actually fit, which a generic tutorial shape never teaches. Learn the sketch and constraint tools deeply before touching advanced features; a clean, fully-constrained sketch is the difference between a model you can edit later and one you have to rebuild from scratch. Keep every file even if it is rough — your own back catalog of past models becomes the fastest reference library for future projects.'},
+ {id:'sk8', emoji:'🖨️', name:'3D Print a Small Project', category:'Maker & Hardware',
+  desc:'Design and print one small, useful object end-to-end, from idea to finished part.',
+  guide:'Choose something you will actually use this week — a cable organizer, a small bracket, a holder for a tool — so there is a real test of whether the part works, not just whether it prints. Print a quick low-detail draft first to check fit before committing to a longer high-quality print; this single habit saves more wasted filament than any slicer setting. Note your layer height, infill, and any supports used directly in this tracker so you build a personal reference of what settings work for what kind of part. Expect the first version to need at least one redesign — that iteration is the actual skill being practiced, not the printing itself.'},
+ {id:'sk9', emoji:'🔩', name:'Solder & Build a Circuit', category:'Maker & Hardware',
+  desc:'Practice through-hole and basic surface-mount soldering on small real circuits.',
+  guide:'Start with a cheap practice kit or an old broken board before risking a part you care about — bad joints are part of learning and should be cheap mistakes. Focus on one skill at a time: clean joint shape first, then drag soldering for rows of pins, then basic surface-mount components with a fine tip. A shiny, smooth, cone-shaped joint is good; a dull, blobby one needs to be redone, and learning to spot the difference by eye is most of the skill. Keep a small notebook of pinouts and component values you look up often — within a few weeks you will stop needing to search for the common ones.'},
+
+ {id:'sk10', emoji:'💰', name:'Track Daily Spending', category:'Finance',
+  desc:'Log every expense, even small ones, to see where money actually goes.',
+  guide:'Write down every purchase the same day, including the small ones like coffee — those are usually the ones that quietly add up the most over a month. Use broad categories (food, transport, fun, fixed bills) rather than a long list nobody maintains consistently. At the end of each week, look at the total per category rather than individual purchases; patterns only show up at that zoomed-out level. Resist the urge to judge or restrict anything in week one — the first goal is just an honest picture, not a diet for your wallet.'},
+ {id:'sk11', emoji:'📈', name:'Learn Stock Market Basics', category:'Finance',
+  desc:'Daily reading or practice to understand how markets, index funds, and risk work.',
+  guide:'Spend 15 minutes a day on one concept at a time — what an index fund is, what a P/E ratio measures, why diversification reduces risk — rather than watching live price movements, which teaches anxiety more than understanding. A free paper-trading simulator is a good place to test ideas with no real money at stake while the concepts are still new. Keep notes in plain language, as if explaining it to a friend; if you cannot explain a term simply, you do not fully understand it yet. This is a slow-compounding habit — the payoff is in the decisions you avoid making badly later, not in any single day\'s reading.'},
+ {id:'sk12', emoji:'🗂️', name:'Build a Monthly Budget', category:'Finance',
+  desc:'Maintain and refine a simple budget spreadsheet, reviewed and adjusted regularly.',
+  guide:'Start with three categories only: fixed costs, flexible spending, and savings — adding more categories too early is the most common reason budgets get abandoned. Review it on the same day each week rather than constantly, so it stays a habit rather than a source of background stress. When a category runs over, treat it as data to adjust next month rather than a failure to fix immediately. The note field here is a good place to record one cause when a month goes off plan — "ate out more during exam week" — so patterns become visible over a few months instead of being forgotten.'},
+
+ {id:'sk13', emoji:'🧘‍♂️', name:'10-Minute Daily Meditation', category:'Mindfulness',
+  desc:'A short, consistent sit to build attention and lower daily stress.',
+  guide:'Same time, same spot, every day — the location and timing matter more than the technique for building the habit in the first month. Start by just counting breaths to ten and restarting the count whenever your mind wanders; the wandering and noticing is the actual exercise, not a failure of it. Resist the urge to chase a "good" session — a restless ten minutes still counts and still builds the habit. After two or three weeks of consistency, you can experiment with longer sits or guided audio, but consistency should come before duration.'},
+ {id:'sk14', emoji:'📝', name:'Gratitude Journaling', category:'Mindfulness',
+  desc:'A few written lines each day noting something specific you are grateful for.',
+  guide:'Write one specific sentence rather than a vague one — "the coffee my roommate made me this morning" sticks and trains attention far better than "I am grateful for my friends." Keep entries short on purpose; a one-line habit survives busy weeks, a one-page habit usually does not. Do it at a fixed point in your existing routine, like right after brushing your teeth, so it attaches to something you already do without thinking. Re-read a week of entries occasionally — the pattern of what shows up repeatedly is often the most useful insight the habit produces.'},
+ {id:'sk15', emoji:'📵', name:'Digital Detox Hour', category:'Mindfulness',
+  desc:'One screen-free hour daily, used for reading, a walk, or quiet downtime.',
+  guide:'Pick the same hour each day rather than "whenever," since an undefined window almost always gets swallowed by notifications. Put the phone in another room, not just face down — physical distance removes far more temptation than willpower does. Have one specific replacement activity ready (a book, a walk route, a sketchbook) so the hour has something to become instead of just empty time. The first few days often feel restless; that restlessness fading is usually the clearest sign the habit is working.'},
+
+ {id:'sk16', emoji:'🎨', name:'Sketch Something Daily', category:'Creative',
+  desc:'A quick daily drawing, from observation or imagination, no pressure to be good.',
+  guide:'Set a hard cap of 10–15 minutes so the habit never feels like a big commitment on a tired day. Draw real objects in front of you more often than from imagination at first — observation builds the eye faster than invented shapes do. Keep every sketch in one dedicated notebook instead of loose pages; flipping back through weeks of pages is the best motivation this habit produces. Skip the urge to judge each page individually — judge the notebook as a whole every month instead.'},
+ {id:'sk17', emoji:'⌨️', name:'Learn Touch Typing', category:'Creative',
+  desc:'Daily typing practice to build speed and accuracy without looking at the keys.',
+  guide:'Use a structured typing trainer rather than just typing normally day to day — deliberate drills on weak letter pairs improve speed far faster than general typing does. Resist looking down at the keyboard even when it slows you down at first; this discomfort is the entire point of the exercise and fades within two or three weeks. Track accuracy before speed — a fast typist who retypes every third word is not actually faster. Ten focused minutes daily beats one long weekly session for this particular skill.'},
+
+ {id:'sk18', emoji:'📚', name:'Read 20 Pages a Day', category:'Reading & Learning',
+  desc:'A steady daily reading habit, fiction or non-fiction, tracked page by page.',
+  guide:'Keep one book in progress at a time at first — juggling several makes it easy to quietly stop all of them. Read at a fixed point in the day (commute, before bed) so it does not compete with open-ended free time, which it will usually lose to. If a book is not working after the first 50 pages, give yourself permission to drop it rather than stall the whole habit on one bad fit. Note a single sentence per session about what stood out — that habit alone makes the reading far more memorable months later.'},
+ {id:'sk19', emoji:'🔤', name:'Learn a New Word Daily', category:'Reading & Learning',
+  desc:'One new vocabulary word a day, used in a sentence to make it stick.',
+  guide:'Write your own sentence with the new word rather than just reading its definition — generating a sentence forces real understanding instead of recognition. Review the past week\'s words every Sunday; spaced repetition is what actually moves a word from short-term to long-term memory. Pick words you are likely to actually use, not obscure trivia, so the habit pays off in real conversations and writing rather than just feeling productive.'},
+
+ {id:'sk20', emoji:'🎸', name:'Practice an Instrument', category:'Music',
+  desc:'Daily focused practice on one instrument, building technique one piece at a time.',
+  guide:'Fifteen focused minutes on one specific weakness beats an hour of loosely playing songs you already know. Warm up with the same short routine every session — a few scales or chord changes — so your hands settle in before tackling anything new. Record yourself on your phone once a week; hearing it back catches timing and tone issues your ear misses while playing. Slow practice on a hard passage, repeated correctly, builds the skill faster than fast practice with mistakes baked in.'}
+];
+
+const TIPS = {
+ 'Fitness':[
+   {title:'Progressive overload log', desc:'Each week, add either one rep, one round, or a few seconds to your routine — small, trackable increases compound fast.'},
+   {title:'Bodyweight circuit project', desc:'Design a 7-move bodyweight circuit you can do anywhere with zero equipment, for travel or busy days.'},
+   {title:'30-day mobility challenge', desc:'Pick one tight joint and dedicate extra daily attention to it for a month — log how range of motion changes.'}
+ ],
+ 'Coding & AI':[
+   {title:'Ship a tiny CLI tool', desc:'Build a small command-line tool that solves one real annoyance in your own workflow — file renaming, note search, anything.'},
+   {title:'Recreate a paper\'s toy example', desc:'Pick one foundational ML paper and reimplement just its smallest example, not the full system, to internalize the idea.'},
+   {title:'Weekly code-reading session', desc:'Read one well-written open-source file a week and write three sentences on what makes the code easy to follow.'}
+ ],
+ 'Maker & Hardware':[
+   {title:'Design-print-iterate log', desc:'For every print, log what you would change next time — your fastest path to better designs is your own iteration history.'},
+   {title:'Enclosure project', desc:'Model and print a custom enclosure for a board or sensor you already own, with cutouts measured from the real part.'},
+   {title:'Parts bin inventory', desc:'Spend one session cataloguing your components and connectors — future projects move faster with a known inventory.'}
+ ],
+ 'Finance':[
+   {title:'No-spend week experiment', desc:'Try one week tracking spending with a single flexible category cut to zero, just to see what you actually miss.'},
+   {title:'Net worth snapshot', desc:'Once a month, total assets minus debts in one number — a slower but more meaningful metric than daily spending alone.'},
+   {title:'Index fund comparison project', desc:'Pick three common index funds and compare fees, holdings, and historical performance side by side, just as an exercise.'}
+ ],
+ 'Mindfulness':[
+   {title:'Weekly reflection page', desc:'Once a week, reread your daily notes and write a short summary of the pattern you notice across the week.'},
+   {title:'Single-tasking hour', desc:'Pick one hour a day with no app-switching at all — one task, one tab, one window.'},
+   {title:'Worry dump page', desc:'Before bed, write down anything looping in your head with no goal of solving it — just getting it out of your mind.'}
+ ],
+ 'Creative':[
+   {title:'Theme-of-the-week sketches', desc:'Pick one loose theme each week (hands, buildings, textures) so daily sketches build a focused skill rather than scattering.'},
+   {title:'Speed-typing project', desc:'Transcribe a page of a book you like as a typing drill — real sentences train rhythm better than random word lists.'},
+   {title:'Mini comic strip', desc:'Turn one week of your habit notes into a 4-panel comic — a fun way to reflect on progress visually.'}
+ ],
+ 'Reading & Learning':[
+   {title:'One-paragraph book reviews', desc:'After finishing a book, write a single paragraph review before looking up anyone else\'s opinion of it.'},
+   {title:'Vocabulary in the wild', desc:'For one week, try spotting your recent new words in things you read or hear, and note where they show up.'},
+   {title:'Reading streak by genre', desc:'Alternate fiction and non-fiction book by book to keep the habit varied enough to sustain long term.'}
+ ],
+ 'Music':[
+   {title:'Record a weekly take', desc:'Every week, record the same short passage and keep the clips — the slow improvement is hard to hear day-to-day but obvious month-to-month.'},
+   {title:'Learn one song end-to-end', desc:'Pick a song slightly above your level and commit to finishing it before starting the next one.'},
+   {title:'Ear-training minutes', desc:'Spend five minutes a few times a week identifying intervals or chords by ear alongside regular practice.'}
+ ]
+};
+
+/* =========================================================
+   STORAGE HELPERS
+========================================================= */
+/* Standalone build: uses the browser's own localStorage instead of the
+   Claude.ai artifact storage API, so this works on GitHub Pages or any
+   static host. Data is saved per-browser, per-device — it won't sync
+   between your phone and laptop unless you add a backend later. */
+const STORAGE_PREFIX = 'horizon:';
+async function sGet(key){
+  try{
+    const v = localStorage.getItem(STORAGE_PREFIX + key);
+    return v ? JSON.parse(v) : null;
+  }catch(e){ return null; }
+}
+async function sSet(key, val){
+  try{ localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(val)); return true; }
+  catch(e){ console.error('storage set failed', key, e); return false; }
+}
+
+/* =========================================================
+   STATE
+========================================================= */
+let habits = [];          // [{id,name,emoji,category,streak,lastDoneDate}]
+let logIndex = {};        // { 'YYYY-MM-DD': {done:N, total:N} }
+let theme = 'day';
+let discoverState = null; // { order:[skillId...], index:N }
+let calCursor = new Date();
+let todayLog = {};         // log for today's date, {habitId:{done,note,images:[]}}
+let dayModalDate = null;
+let dayModalLog = {};
+
+function todayStr(){ return fmtDate(new Date()); }
+function fmtDate(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+/* =========================================================
+   INIT
+========================================================= */
+async function init(){
+  habits = await sGet('habits') || [];
+  logIndex = await sGet('logIndex') || {};
+  theme = await sGet('theme') || 'day';
+  discoverState = await sGet('discoverState');
+  if(!discoverState || !discoverState.order || !discoverState.order.length){
+    discoverState = { order: shuffle(SKILLS.map(s=>s.id)), index: 0 };
+    await sSet('discoverState', discoverState);
+  }
+  todayLog = await sGet('log:' + todayStr()) || {};
+
+  setTheme(theme, false);
+  buildBackdrop();
+  renderDow();
+  renderCalendar();
+  renderTodayPanel();
+  renderHabits();
+  renderDiscoverCard();
+  renderTips();
+
+  document.getElementById('bootLoading').classList.add('hidden');
+}
+
+/* =========================================================
+   THEME + BACKDROP
+========================================================= */
+function setTheme(name, animate){
+  document.body.setAttribute('data-theme', name);
+  document.getElementById('themeToggle').textContent = name === 'day' ? '🌙' : '☀️';
+  document.getElementById('crawlReplayBtn').style.display = name === 'night' ? 'flex' : 'none';
+  buildBackdrop();
+  theme = name;
+  sSet('theme', name);
+}
+
+function buildBackdrop(){
+  const bd = document.getElementById('backdrop');
+  bd.innerHTML = '';
+  if(theme === 'day'){
+    bd.innerHTML = `
+      <div class="bd-sun"></div>
+      <div class="bd-cloud" style="width:90px;height:34px;top:14%;left:12%;"></div>
+      <div class="bd-cloud" style="width:60px;height:24px;top:22%;left:55%;"></div>
+      <svg class="mtn mtn-far" viewBox="0 0 400 100" preserveAspectRatio="none"><polygon points="0,100 0,55 60,25 130,60 190,20 260,58 330,30 400,55 400,100"/></svg>
+      <svg class="mtn mtn-mid" viewBox="0 0 400 90" preserveAspectRatio="none"><polygon points="0,90 0,50 80,15 160,55 230,25 300,52 400,18 400,90"/></svg>
+      <svg class="mtn mtn-near" viewBox="0 0 400 70" preserveAspectRatio="none"><polygon points="0,70 0,38 70,8 150,42 240,12 320,40 400,15 400,70"/></svg>
+    `;
+  } else {
+    let html = '';
+    for(let i=0;i<70;i++){
+      const s = 1 + Math.random()*2;
+      html += `<div class="star" style="width:${s}px;height:${s}px;top:${Math.random()*92}%;left:${Math.random()*100}%;animation-delay:${(Math.random()*3.5).toFixed(2)}s;"></div>`;
+    }
+    html += `<div class="planet" style="width:64px;height:64px;top:14%;left:75%;background:radial-gradient(circle at 35% 30%, #9C8CFF, #5C3CC9 70%);"></div>`;
+    html += `<div class="planet-ring" style="width:104px;height:104px;top:9%;left:69%;"></div>`;
+    html += `<div class="planet" style="width:30px;height:30px;top:62%;left:10%;background:radial-gradient(circle at 35% 30%, #6FE3D6, #1C8C82 70%);"></div>`;
+    html += `<div class="shooting-star"></div>`;
+    bd.innerHTML = html;
+  }
+}
+
+function playCrawl(){
+  const overlay = document.getElementById('crawlOverlay');
+  const text = document.getElementById('crawlText');
+  const lines = [
+    'HORIZON',
+    '',
+    'Daylight fades over the ridgeline.',
+    'Far above, a quieter kind of progress begins —',
+    'one logged habit at a time,',
+    'carried out across the dark',
+    "like a ship's log written under unfamiliar stars."
+  ];
+  text.innerHTML = lines.join('<br>');
+  overlay.classList.add('show');
+  const done = () => overlay.classList.remove('show');
+  const t = setTimeout(done, 5600);
+  document.getElementById('crawlSkip').onclick = () => { clearTimeout(t); done(); };
+}
+
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const next = theme === 'day' ? 'night' : 'day';
+  if(next === 'night') playCrawl();
+  setTheme(next, true);
+});
+document.getElementById('crawlReplayBtn').addEventListener('click', playCrawl);
+
+/* =========================================================
+   NAV
+========================================================= */
+document.querySelectorAll('.navbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+  });
+});
+
+/* =========================================================
+   CALENDAR
+========================================================= */
+const DOW = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+function renderDow(){
+  document.getElementById('calDow').innerHTML = DOW.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+}
+
+function renderCalendar(){
+  const label = calCursor.toLocaleString(undefined,{month:'long', year:'numeric'});
+  document.getElementById('monthLabel').textContent = label;
+  const grid = document.getElementById('calendarGrid');
+  grid.innerHTML = '';
+  const y = calCursor.getFullYear(), m = calCursor.getMonth();
+  const firstDow = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const today = todayStr();
+
+  for(let i=0;i<firstDow;i++){
+    const e = document.createElement('div'); e.className='cal-cell empty'; grid.appendChild(e);
+  }
+  for(let d=1; d<=daysInMonth; d++){
+    const dateStr = fmtDate(new Date(y,m,d));
+    const cell = document.createElement('button');
+    cell.className = 'cal-cell' + (dateStr === today ? ' today' : '');
+    const info = logIndex[dateStr];
+    let dotsHtml = '';
+    if(info && info.total > 0){
+      const shown = Math.min(info.done, 4);
+      for(let k=0;k<shown;k++) dotsHtml += '<span class="cal-dot"></span>';
+    }
+    cell.innerHTML = `<span>${d}</span><span class="cal-dots">${dotsHtml}</span>`;
+    cell.addEventListener('click', () => openDayModal(dateStr));
+    grid.appendChild(cell);
+  }
+}
+document.getElementById('prevMonth').addEventListener('click', () => {
+  calCursor = new Date(calCursor.getFullYear(), calCursor.getMonth()-1, 1);
+  renderCalendar();
+});
+document.getElementById('nextMonth').addEventListener('click', () => {
+  calCursor = new Date(calCursor.getFullYear(), calCursor.getMonth()+1, 1);
+  renderCalendar();
+});
+
+/* =========================================================
+   HABIT LOG ROW (shared by Today panel + Day modal)
+========================================================= */
+function compressImage(file, cb){
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = e => { img.src = e.target.result; };
+  img.onload = () => {
+    const maxW = 640;
+    const scale = Math.min(1, maxW / img.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    cb(canvas.toDataURL('image/jpeg', 0.7));
+  };
+  reader.readAsDataURL(file);
+}
+
+function buildHabitLogRow(habit, dateStr, logObj, onChange){
+  const entry = logObj[habit.id] || { done:false, note:'', images:[] };
+  logObj[habit.id] = entry;
+
+  const row = document.createElement('div');
+  row.className = 'habit-log-row';
+  const color = CATEGORY_COLORS[habit.category] || '#888';
+  row.innerHTML = `
+    <div class="hlr-top">
+      <button class="hlr-check ${entry.done?'done':''}">${entry.done?'✓':''}</button>
+      <span class="hlr-emoji">${habit.emoji}</span>
+      <span class="hlr-name">${habit.name}</span>
+      <span class="hlr-cat" style="background:${color}">${habit.category}</span>
+      <button class="hlr-expand-btn">📝</button>
+    </div>
+    <div class="hlr-detail">
+      <textarea placeholder="Notes for this day…">${entry.note||''}</textarea>
+      <div class="hlr-img-row">
+        ${entry.images.map((src,i)=>`<div class="hlr-img-thumb"><img src="${src}"><button class="rm" data-i="${i}">×</button></div>`).join('')}
+        <label class="hlr-img-add">＋<input type="file" accept="image/*" multiple style="display:none;"></label>
+      </div>
+      <div class="hlr-save">Saved automatically</div>
+    </div>
+  `;
+  const checkBtn = row.querySelector('.hlr-check');
+  const expandBtn = row.querySelector('.hlr-expand-btn');
+  const detail = row.querySelector('.hlr-detail');
+  const textarea = row.querySelector('textarea');
+  const fileInput = row.querySelector('input[type=file]');
+  const imgRow = row.querySelector('.hlr-img-row');
+
+  checkBtn.addEventListener('click', () => {
+    entry.done = !entry.done;
+    checkBtn.classList.toggle('done', entry.done);
+    checkBtn.textContent = entry.done ? '✓' : '';
+    if(dateStr === todayStr()) updateStreakForToggle(habit, entry.done);
+    onChange();
+  });
+  expandBtn.addEventListener('click', () => detail.classList.toggle('open'));
+  textarea.addEventListener('input', () => { entry.note = textarea.value; onChange(); });
+  fileInput.addEventListener('change', () => {
+    Array.from(fileInput.files).forEach(f => {
+      compressImage(f, dataUrl => {
+        entry.images.push(dataUrl);
+        renderThumbs();
+        onChange();
+      });
+    });
+    fileInput.value = '';
+  });
+  function renderThumbs(){
+    imgRow.querySelectorAll('.hlr-img-thumb').forEach(t=>t.remove());
+    const addLabel = imgRow.querySelector('.hlr-img-add');
+    entry.images.forEach((src,i)=>{
+      const t = document.createElement('div');
+      t.className='hlr-img-thumb';
+      t.innerHTML = `<img src="${src}"><button class="rm" data-i="${i}">×</button>`;
+      t.querySelector('.rm').addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        entry.images.splice(i,1);
+        renderThumbs();
+        onChange();
+      });
+      imgRow.insertBefore(t, addLabel);
+    });
+  }
+  row.querySelectorAll('.rm').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      entry.images.splice(parseInt(btn.dataset.i),1);
+      renderThumbs();
+      onChange();
+    });
+  });
+  return row;
+}
+
+function updateStreakForToggle(habit, isDone){
+  const t = todayStr();
+  if(isDone){
+    if(habit.lastDoneDate === yesterdayStr()) habit.streak = (habit.streak||0) + 1;
+    else if(habit.lastDoneDate !== t) habit.streak = 1;
+    habit.lastDoneDate = t;
+  } else {
+    if(habit.lastDoneDate === t){
+      habit.streak = Math.max(0, (habit.streak||1) - 1);
+      habit.lastDoneDate = null;
+    }
+  }
+  sSet('habits', habits);
+  renderHabits();
+}
+function yesterdayStr(){
+  const d = new Date(); d.setDate(d.getDate()-1); return fmtDate(d);
+}
+
+async function persistDayLog(dateStr, logObj){
+  await sSet('log:' + dateStr, logObj);
+  const total = habits.length;
+  const done = Object.values(logObj).filter(e=>e.done).length;
+  logIndex[dateStr] = { done, total };
+  await sSet('logIndex', logIndex);
+  renderCalendar();
+}
+
+/* =========================================================
+   TODAY PANEL
+========================================================= */
+function renderTodayPanel(){
+  document.getElementById('todayDateLabel').textContent = new Date().toLocaleDateString(undefined,{month:'short', day:'numeric'});
+  const list = document.getElementById('todayHabitList');
+  list.innerHTML = '';
+  if(habits.length === 0){
+    list.innerHTML = `<div class="empty-state"><span class="e-emoji">🪴</span>No habits yet. Add one of your own, or swipe through Discover to find one.</div>`;
+    return;
+  }
+  habits.forEach(h => {
+    const row = buildHabitLogRow(h, todayStr(), todayLog, () => persistDayLog(todayStr(), todayLog));
+    list.appendChild(row);
+  });
+}
+
+/* =========================================================
+   DAY MODAL (any date from calendar)
+========================================================= */
+async function openDayModal(dateStr){
+  dayModalDate = dateStr;
+  dayModalLog = dateStr === todayStr() ? todayLog : (await sGet('log:' + dateStr) || {});
+  const d = new Date(dateStr + 'T00:00:00');
+  document.getElementById('dayModalTitle').textContent = d.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'});
+  const body = document.getElementById('dayModalBody');
+  body.innerHTML = '';
+  if(habits.length === 0){
+    body.innerHTML = `<div class="empty-state"><span class="e-emoji">🪴</span>No habits yet — add some from the Habits tab first.</div>`;
+  } else {
+    habits.forEach(h => {
+      const row = buildHabitLogRow(h, dateStr, dayModalLog, () => persistDayLog(dateStr, dayModalLog));
+      body.appendChild(row);
+    });
+  }
+  document.getElementById('dayModalOverlay').classList.add('open');
+}
+document.getElementById('dayModalClose').addEventListener('click', () => {
+  document.getElementById('dayModalOverlay').classList.remove('open');
+});
+
+/* =========================================================
+   HABITS TAB
+========================================================= */
+function renderHabits(){
+  const list = document.getElementById('habitsList');
+  list.innerHTML = '';
+  if(habits.length === 0){
+    list.innerHTML = `<div class="empty-state"><span class="e-emoji">🧭</span>No habits tracked yet. Add your own, or find one in Discover.</div>`;
+    return;
+  }
+  habits.forEach(h => {
+    const color = CATEGORY_COLORS[h.category] || '#888';
+    const card = document.createElement('div');
+    card.className = 'habit-card';
+    card.innerHTML = `
+      <div class="emo">${h.emoji}</div>
+      <div class="meta">
+        <div class="nm">${h.name}</div>
+        <div class="row2">
+          <span class="hlr-cat" style="background:${color}">${h.category}</span>
+          <span class="streak-pill mono">${h.streak||0} day streak</span>
+        </div>
+      </div>
+      <div class="habit-actions">
+        <button class="del" title="Delete">🗑</button>
+      </div>
+    `;
+    card.querySelector('.del').addEventListener('click', async () => {
+      if(!confirm(`Remove "${h.name}" from your habits?`)) return;
+      habits = habits.filter(x=>x.id!==h.id);
+      await sSet('habits', habits);
+      renderHabits(); renderTodayPanel(); renderTips(); renderCalendar();
+    });
+    list.appendChild(card);
+  });
+}
+
+/* add habit modal */
+let pickedEmoji = EMOJI_CHOICES[0];
+function openAddHabitModal(){
+  document.getElementById('habitNameInput').value = '';
+  const pick = document.getElementById('emojiPick');
+  pick.innerHTML = EMOJI_CHOICES.map(e=>`<button data-e="${e}">${e}</button>`).join('');
+  pickedEmoji = EMOJI_CHOICES[0];
+  pick.querySelectorAll('button').forEach((b,i)=>{
+    if(i===0) b.classList.add('sel');
+    b.addEventListener('click', ()=>{
+      pick.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));
+      b.classList.add('sel');
+      pickedEmoji = b.dataset.e;
+    });
+  });
+  const sel = document.getElementById('habitCatSelect');
+  sel.innerHTML = CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('');
+  document.getElementById('addHabitOverlay').classList.add('open');
+}
+document.getElementById('addHabitBtn').addEventListener('click', openAddHabitModal);
+document.getElementById('addHabitClose').addEventListener('click', ()=> document.getElementById('addHabitOverlay').classList.remove('open'));
+document.getElementById('saveHabitBtn').addEventListener('click', async () => {
+  const name = document.getElementById('habitNameInput').value.trim();
+  if(!name){ document.getElementById('habitNameInput').focus(); return; }
+  const cat = document.getElementById('habitCatSelect').value;
+  habits.push({ id:'h'+Date.now(), name, emoji:pickedEmoji, category:cat, streak:0, lastDoneDate:null });
+  await sSet('habits', habits);
+  document.getElementById('addHabitOverlay').classList.remove('open');
+  renderHabits(); renderTodayPanel(); renderTips(); renderCalendar();
+});
+
+/* =========================================================
+   DISCOVER / SWIPE
+========================================================= */
+function habitNamesLower(){ return habits.map(h=>h.name.toLowerCase()); }
+
+function nextUnaddedSkill(){
+  if(!discoverState.order.length) return null;
+  let tries = 0;
+  while(tries < discoverState.order.length * 2){
+    const id = discoverState.order[discoverState.index % discoverState.order.length];
+    const skill = SKILLS.find(s=>s.id===id);
+    if(skill && !habitNamesLower().includes(skill.name.toLowerCase())) return skill;
+    discoverState.index++;
+    tries++;
+  }
+  return null;
+}
+
+function renderDiscoverCard(){
+  const stage = document.getElementById('swipeStage');
+  stage.innerHTML = '';
+  const skill = nextUnaddedSkill();
+  if(!skill){
+    stage.innerHTML = `<div class="empty-state"><span class="e-emoji">✨</span>You've been through every suggestion. Check the Tips tab, or add your own habits manually.</div>`;
+    return;
+  }
+  const color = CATEGORY_COLORS[skill.category] || '#888';
+  const card = document.createElement('div');
+  card.className = 'swipe-card';
+  card.id = 'currentSwipeCard';
+  card.innerHTML = `
+    <div class="stripe" style="background:${color}"></div>
+    <div class="sc-emoji">${skill.emoji}</div>
+    <div class="sc-name">${skill.name}</div>
+    <span class="sc-cat" style="background:${color}">${skill.category}</span>
+    <p class="sc-desc">${skill.desc}</p>
+    <button class="sc-guide-btn">📖 Read the guide</button>
+  `;
+  stage.appendChild(card);
+  card.querySelector('.sc-guide-btn').addEventListener('click', (e)=>{ e.stopPropagation(); openArticle(skill); });
+  attachSwipeGestures(card, skill);
+}
+
+function attachSwipeGestures(card, skill){
+  let startX=0, startY=0, dx=0, dragging=false;
+  card.addEventListener('pointerdown', e=>{
+    dragging = true; startX = e.clientX; startY = e.clientY;
+    card.setPointerCapture(e.pointerId);
+  });
+  card.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const rot = dx / 18;
+    card.style.transform = `translate(${dx}px, ${dy*0.15}px) rotate(${rot}deg)`;
+  });
+  function endDrag(){
+    if(!dragging) return;
+    dragging = false;
+    if(dx > 90) animateOut(card, 1, ()=>acceptSkill(skill));
+    else if(dx < -90) animateOut(card, -1, ()=>declineSkill(skill));
+    else { card.style.transition='transform 0.25s ease'; card.style.transform=''; setTimeout(()=>card.style.transition='',260); }
+    dx = 0;
+  }
+  card.addEventListener('pointerup', endDrag);
+  card.addEventListener('pointercancel', endDrag);
+}
+function animateOut(card, dir, cb){
+  card.style.transition = 'transform 0.35s ease, opacity 0.35s ease';
+  card.style.transform = `translate(${dir*520}px, -40px) rotate(${dir*30}deg)`;
+  card.style.opacity = '0';
+  setTimeout(cb, 280);
+}
+
+async function acceptSkill(skill){
+  habits.push({ id:'h'+Date.now(), name:skill.name, emoji:skill.emoji, category:skill.category, streak:0, lastDoneDate:null, fromDiscover:true });
+  await sSet('habits', habits);
+  discoverState.index++;
+  await sSet('discoverState', discoverState);
+  renderHabits(); renderTodayPanel(); renderTips(); renderCalendar();
+  renderDiscoverCard();
+}
+async function declineSkill(skill){
+  discoverState.index++;
+  await sSet('discoverState', discoverState);
+  renderDiscoverCard();
+}
+document.getElementById('acceptBtn').addEventListener('click', () => {
+  const card = document.getElementById('currentSwipeCard');
+  const skill = nextUnaddedSkill();
+  if(card && skill) animateOut(card, 1, ()=>acceptSkill(skill));
+});
+document.getElementById('declineBtn').addEventListener('click', () => {
+  const card = document.getElementById('currentSwipeCard');
+  const skill = nextUnaddedSkill();
+  if(card && skill) animateOut(card, -1, ()=>declineSkill(skill));
+});
+
+/* article modal */
+let articleSkill = null;
+function openArticle(skill){
+  articleSkill = skill;
+  document.getElementById('articleTitle').textContent = skill.name;
+  document.getElementById('articleBody').textContent = skill.guide;
+  document.getElementById('articleOverlay').classList.add('open');
+}
+document.getElementById('articleClose').addEventListener('click', ()=> document.getElementById('articleOverlay').classList.remove('open'));
+document.getElementById('articleDeclineBtn').addEventListener('click', async ()=>{
+  document.getElementById('articleOverlay').classList.remove('open');
+  if(articleSkill) await declineSkill(articleSkill);
+});
+document.getElementById('articleAcceptBtn').addEventListener('click', async ()=>{
+  document.getElementById('articleOverlay').classList.remove('open');
+  if(articleSkill) await acceptSkill(articleSkill);
+});
+
+/* =========================================================
+   TIPS TAB
+========================================================= */
+function renderTips(){
+  const list = document.getElementById('tipsList');
+  list.innerHTML = '';
+  const cats = [...new Set(habits.map(h=>h.category))];
+  if(cats.length === 0){
+    list.innerHTML = `<div class="empty-state"><span class="e-emoji">💡</span>Add a habit or two and this tab will fill up with tips and project ideas matched to them.</div>`;
+    return;
+  }
+  cats.forEach(cat => {
+    const color = CATEGORY_COLORS[cat] || '#888';
+    const header = document.createElement('div');
+    header.className = 'section-title';
+    header.textContent = cat;
+    list.appendChild(header);
+    (TIPS[cat]||[]).forEach(tip => {
+      const card = document.createElement('div');
+      card.className = 'tip-card';
+      card.innerHTML = `<div class="tip-cat" style="color:${color}">${cat}</div><h4>${tip.title}</h4><p>${tip.desc}</p>`;
+      list.appendChild(card);
+    });
+  });
+}
+
+/* =========================================================
+   BOOT
+========================================================= */
+init();
+</script>
+</body>
+</html>
